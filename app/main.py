@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.routers import auth as auth_router
+from app.routers import health as health_router
 
 
 @asynccontextmanager
@@ -50,6 +51,8 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     # --- Routers ---
+    # Detailed readiness probe (Postgres + Redis, 2s timeout each).
+    app.include_router(health_router.router)
     # Auth surface: POST /auth/login, GET /auth/me.
     app.include_router(auth_router.router, prefix=settings.API_V1_PREFIX)
 
