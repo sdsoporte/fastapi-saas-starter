@@ -95,3 +95,56 @@ async def test_missing_password_returns_422(auth_client) -> None:
     ac, snap = auth_client
     resp = await ac.post("/api/v1/auth/login", data={"username": snap["email"]})
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_me_returns_user_for_valid_token(auth_client) -> None:
+    ac, snap = auth_client
+    resp = await _login(ac, snap["email"], snap["password"])
+    token = resp.json()["access_token"]
+    me = await ac.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    body = me.json()
+    assert body["id"] == snap["user_id"]
+    assert body["email"] == snap["email"]
+    assert body["tenant_id"] == snap["tenant_id"]
+    assert body["role"] == "tenant_admin"
+    assert "password" not in body
+    assert "hashed_password" not in body
+
+
+@pytest.mark.asyncio
+async def test_missing_authorization_header_returns_401(auth_client) -> None:
+    ac, _ = auth_client
+    resp = await ac.get("/api/v1/auth/me")
+    assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_tampered_signature_returns_401(auth_client) -> None:
+    ac, snap = auth_client
+    resp = await _login(ac, snap["email"], snap["password"])
+    token = resp.json()["access_token"]
+    head, mid, sig = token.split(".")
+    replacement = "B" if sig[5] != "B" else "C"
+    tampered = f"{head}.{mid}.{sig[:5]}{replacement}{sig[6:]}"
+    assert tampered != token
+    me = await ac.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {tampered}"})
+    assert me.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_expired_token_returns_401(auth_client) -> None:
+    from app.core.security import create_access_token
+
+    ac, snap = auth_client
+    expired = create_access_token(subject=snap["user_id"], tenant_id=snap["tenant_id"], role="tenant_admin", expires_minutes=-1)
+    me = await ac.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {expired}"})
+    assert me.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_malformed_token_returns_401(auth_client) -> None:
+    ac, _ = auth_client
+    me = await ac.get("/api/v1/auth/me", headers={"Authorization": "Bearer not.a.jwt"})
+    assert me.status_code == 401
