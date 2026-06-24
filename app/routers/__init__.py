@@ -1,0 +1,1 @@
+"""Routers package — auth and health are mounted by app.main."""

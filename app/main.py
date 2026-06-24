@@ -13,6 +13,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.routers import auth as auth_router
+from app.routers import health as health_router
 
 
 @asynccontextmanager
@@ -48,8 +50,13 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    # --- API v1 router stub ---
-    # Routers are added in later PRs (auth, health/detailed, tenants, users, plans).
+    # --- Routers ---
+    # Detailed readiness probe (Postgres + Redis, 2s timeout each).
+    app.include_router(health_router.router)
+    # Auth surface: POST /auth/login, GET /auth/me.
+    app.include_router(auth_router.router, prefix=settings.API_V1_PREFIX)
+
+    # --- API v1 root ---
     @app.get(f"{settings.API_V1_PREFIX}/", tags=["meta"])
     async def api_v1_root() -> dict[str, str]:
         return {"message": f"{settings.APP_NAME} API v1"}
